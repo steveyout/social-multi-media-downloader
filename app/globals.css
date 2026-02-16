@@ -1,13 +1,33 @@
 @import "tailwindcss";
 
 :root {
+  /* Core background/foreground */
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Professional Red Palette Variables */
+  --color-brand-900: #7f1d1d;
+  --color-brand-600: #dc2626;
+  --color-brand-500: #ef4444;
+  --color-brand-50: #fef2f2;
+
+  /* Gradient Utility Variable */
+  --gradient-brand: linear-gradient(135deg, #7f1d1d 0%, #dc2626 50%, #ef4444 100%);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  /* Adding our Brand colors to the Tailwind Engine */
+  --color-brand-dark: var(--color-brand-900);
+  --color-brand-primary: var(--color-brand-600);
+  --color-brand-light: var(--color-brand-500);
+  --color-brand-surface: var(--color-brand-50);
+
+  /* Adding the Gradient as a background image utility */
+  --background-image-brand-gradient: var(--gradient-brand);
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -16,11 +36,20 @@
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+
+    /* Adjusting the red for Dark Mode (slightly deeper/muted) */
+    --color-brand-900: #450a0a;
+    --color-brand-600: #991b1b;
+    --color-brand-500: #b91c1c;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    /* Next.js 16 typically uses Geist, but keeping your fallback */
+    font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+    @apply antialiased;
+  }
 }
