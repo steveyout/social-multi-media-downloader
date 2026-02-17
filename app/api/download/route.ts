@@ -8,67 +8,105 @@ import fs from "fs";
  * AUTHENTICATED VPS ENGINE:
  * We inject --cookies into the binary arguments globally.
  */
-interface IYtDlpInstance {
-    getInfoAsync(url: string): Promise<Record<string, unknown>>;
-    stream(url: string): {
-        filter(f: string): { type(t: string): never };
-        getStream(): import("stream").Readable;
+interface IDownloadBuilder {
+    format(options: { filter?: string; quality?: string; type?: string }): IDownloadBuilder;
+    Auth: {
+        cookies(path: string): IDownloadBuilder;
     };
+    getStream(): import("stream").Readable;
 }
-const getBinaryPath = () => {
-    const vpsPath = '/usr/local/bin/yt-dlp';
+
+interface IInfoBuilder {
+    Auth: {
+        cookies(path: string): IInfoBuilder;
+    };
+    fetch(): Promise<Record<string, unknown>>;
+}
+
+interface IYtDlpInstance {
+    getInfo(url: string): IInfoBuilder;
+    download(url: string): IDownloadBuilder;
+}
+
+const getBinaryPath = (): string => {
+    const pipPath = '/usr/local/bin/yt-dlp';
+    const systemPath = '/usr/bin/yt-dlp';
     const localBin = path.join(process.cwd(), 'bin', 'yt-dlp');
 
-    if (fs.existsSync(vpsPath)) return vpsPath;
+    if (fs.existsSync(pipPath)) return pipPath;
+    if (fs.existsSync(systemPath)) return systemPath;
     if (fs.existsSync(localBin)) return localBin;
 
     return 'yt-dlp';
 };
 
-const COOKIES_PATH = path.resolve(process.cwd(), 'cookies.txt');
+const COOKIES_FILE_PATH = path.resolve(process.cwd(), 'cookies.txt');
 
-// Define the constructor type that handles the binaryPath and global args
-type YtDlpConstructor = new (options: { binaryPath: string; args?: string[] }) => IYtDlpInstance;
-
-// Cast the imported class to our custom constructor
+// Casting constructor through unknown to avoid any
+type YtDlpConstructor = new (options: { binaryPath: string }) => IYtDlpInstance;
 const YtDlpEngine = (YtDlp as unknown) as YtDlpConstructor;
 
 const ytdlp = new YtDlpEngine({
-    binaryPath: getBinaryPath(),
-    // Global arguments applied to every call (Info + Stream)
-    ...(fs.existsSync(COOKIES_PATH) ? { args: [`--cookies=${COOKIES_PATH}`] } : {})
+    binaryPath: getBinaryPath()
 });
 
 export async function POST(req: NextRequest) {
     try {
         const { url, type } = await req.json();
 
-        const info = await ytdlp.getInfoAsync(url) as Record<string, unknown>;
+        const hasCookies = fs.existsSync(COOKIES_FILE_PATH);
+
+        /**
+         * 1. GET METADATA
+         */
+        let infoBuilder = ytdlp.getInfo(url);
+        if (hasCookies) {
+            infoBuilder = infoBuilder.Auth.cookies(COOKIES_FILE_PATH);
+        }
+        const info = await infoBuilder.fetch();
+
         const realTitle = String(info.title || "Youplex_Download");
-        // @ts-expect-error - ytdlp-nodejs type definitions
-        const thumbnail = info.thumbnails?.[info.thumbnails.length - 1]?.url || "";
+        const rawThumbnails = (info.thumbnails as Record<string, string>[]) || [];
+        const thumbnail = rawThumbnails.length > 0
+            ? String(rawThumbnails[rawThumbnails.length - 1].url)
+            : "";
 
-        // Dynamically find the best format for size calculation
-        // @ts-expect-error - ytdlp-nodejs type definitions
-        const selectedFormat = info.formats.reverse().find(f =>
+        // Logic to extract the correct filesize from the format list
+        const rawFormats = (info.formats as Record<string, unknown>[]) || [];
+        const formats = [...rawFormats].reverse();
+
+        const selectedFormat = formats.find((f) =>
             type === 'audio' ? f.vcodec === 'none' : f.vcodec !== 'none'
-        ) || // @ts-expect-error - ytdlp-nodejs type definitions
-            info.formats[0];
+        ) || (rawFormats.length > 0 ? rawFormats[0] : null);
 
-        const fileSize = selectedFormat?.filesize || selectedFormat?.filesize_approx || 0;
+        // Filesize calculation
+        const fileSize = typeof selectedFormat?.filesize === 'number'
+            ? selectedFormat.filesize
+            : (typeof selectedFormat?.filesize_approx === 'number' ? selectedFormat.filesize_approx : 0);
 
-        const streamBuilder = ytdlp.stream(url);
+        /**
+         * 2. DOWNLOAD STREAM
+         */
+        let downloadBuilder = ytdlp.download(url);
 
         if (type === "audio") {
-            // "bestaudio" ensures we get the highest bitrate audio available
-            streamBuilder.filter('bestaudio/best').type('mp3');
+            downloadBuilder = downloadBuilder.format({
+                filter: 'bestaudio',
+                type: 'mp3'
+            });
         } else {
-            // "bestvideo+bestaudio/best" is the gold standard for best quality
-            // It grabs the highest res video and highest res audio and merges them
-            streamBuilder.filter('bestvideo+bestaudio/best').type('mp4');
+            downloadBuilder = downloadBuilder.format({
+                filter: 'mergevideo',
+                quality: '1080p',
+                type: 'mp4'
+            });
         }
 
-        const nodeStream = streamBuilder.getStream();
+        if (hasCookies) {
+            downloadBuilder = downloadBuilder.Auth.cookies(COOKIES_FILE_PATH);
+        }
+
+        const nodeStream = downloadBuilder.getStream();
         const passThrough = new PassThrough();
         nodeStream.pipe(passThrough);
 
