@@ -4,6 +4,10 @@ import { PassThrough } from "stream";
 import path from "path";
 import fs from "fs";
 
+/**
+ * STRICT INTERFACES
+ * Recursive builder pattern to satisfy ESLint without using 'any'.
+ */
 interface IBuilderAuth {
     cookies(path: string): IStreamBuilder;
     username(user: string): IStreamBuilder;
@@ -20,7 +24,7 @@ interface IStreamBuilder {
 }
 
 interface IYtDlpInstance {
-    getInfoAsync(url: string): Promise<Record<string, unknown>>;
+    getInfoAsync(url: string, options?: { rawArgs?: string[] }): Promise<Record<string, unknown>>;
     stream(url: string): IStreamBuilder;
 }
 
@@ -36,12 +40,11 @@ const getBinaryPath = (): string => {
     return 'yt-dlp';
 };
 
+// Use path.resolve to ensure the VPS finds the file regardless of PM2's working directory
 const COOKIES_FILE_PATH = path.resolve(process.cwd(), 'cookies.txt');
 
-/**
- * Robust Constructor Initialization
- */
-// @ts-expect-error - Handling library interop
+// Resolve the Library Class
+// @ts-expect-error - Handling module interop for ytdlp-nodejs
 const YtDlpClass = YtDlpModule.YtDlp || YtDlpModule.default || YtDlpModule;
 
 type YtDlpConstructor = new (options: { binaryPath: string }) => IYtDlpInstance;
@@ -57,10 +60,15 @@ export async function POST(req: NextRequest) {
 
         const hasCookies = fs.existsSync(COOKIES_FILE_PATH);
 
+        console.log(`[Youplex] Processing: ${url} | Cookies Found: ${hasCookies}`);
+
         /**
          * 1. GET METADATA
+         * We pass cookies as rawArgs here because getInfoAsync is a standalone promise.
          */
-        const info = await ytdlp.getInfoAsync(url);
+        const info = await ytdlp.getInfoAsync(url, {
+            rawArgs: hasCookies ? [`--cookies=${COOKIES_FILE_PATH}`] : []
+        });
 
         const realTitle = String(info.title || "Youplex_Download");
         const rawThumbnails = (info.thumbnails as Record<string, unknown>[]) || [];
@@ -80,14 +88,15 @@ export async function POST(req: NextRequest) {
             : (typeof selectedFormat?.filesize_approx === 'number' ? selectedFormat.filesize_approx : 0);
 
         /**
-         * 2. STREAMING WITH FLUENT API
+         * 2. DOWNLOAD STREAM
+         * Using the fluent API as per documentation.
          */
         const streamBuilder = ytdlp.stream(url);
 
         if (type === "audio") {
             streamBuilder
                 .filter('audioonly')
-                .quality(0) // Best VBR quality (0-10)
+                .quality(0)
                 .type('mp3');
         } else {
             streamBuilder
@@ -96,6 +105,7 @@ export async function POST(req: NextRequest) {
                 .type('mp4');
         }
 
+        // Apply cookies to the stream if file exists
         if (hasCookies) {
             streamBuilder.Auth.cookies(COOKIES_FILE_PATH);
         }
