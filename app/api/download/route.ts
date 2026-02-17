@@ -101,7 +101,7 @@ export async function POST(req: NextRequest) {
         } else {
             streamBuilder
                 .filter('mergevideo')
-                .quality('1080p')
+                .quality('highest')
                 .type('mp4');
         }
 
