@@ -5,7 +5,7 @@ import path from "path";
 import fs from "fs";
 
 interface YtDlpOptions {
-    path?: string;
+    binaryPath?: string;
 }
 
 const getBinaryPath = () => {
@@ -20,7 +20,7 @@ const getBinaryPath = () => {
 
 // We use 'unknown' then the specific interface to avoid the "unexpected any" lint error
 const ytdlp = new (YtDlp as unknown as new (options: YtDlpOptions) => typeof YtDlp)({
-    path: getBinaryPath()
+    binaryPath: getBinaryPath()
 }) as unknown as YtDlp;
 
 export async function POST(req: NextRequest) {
