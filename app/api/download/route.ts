@@ -1,31 +1,27 @@
 import { NextRequest } from "next/server";
-import { YtDlp } from 'ytdlp-nodejs';
+import * as YtDlpModule from 'ytdlp-nodejs';
 import { PassThrough } from "stream";
 import path from "path";
 import fs from "fs";
 
-/**
- * AUTHENTICATED VPS ENGINE:
- * We inject --cookies into the binary arguments globally.
- */
-interface IDownloadBuilder {
-    format(options: { filter?: string; quality?: string; type?: string }): IDownloadBuilder;
-    Auth: {
-        cookies(path: string): IDownloadBuilder;
-    };
-    getStream(): import("stream").Readable;
+interface IBuilderAuth {
+    cookies(path: string): IStreamBuilder;
+    username(user: string): IStreamBuilder;
+    password(pass: string): IStreamBuilder;
 }
 
-interface IInfoBuilder {
-    Auth: {
-        cookies(path: string): IInfoBuilder;
-    };
-    fetch(): Promise<Record<string, unknown>>;
+interface IStreamBuilder {
+    filter(f: string): IStreamBuilder;
+    quality(q: string | number): IStreamBuilder;
+    type(t: string): IStreamBuilder;
+    Auth: IBuilderAuth;
+    getStream(): import("stream").Readable;
+    on(event: string, fn: (data: unknown) => void): IStreamBuilder;
 }
 
 interface IYtDlpInstance {
-    getInfo(url: string): IInfoBuilder;
-    download(url: string): IDownloadBuilder;
+    getInfoAsync(url: string): Promise<Record<string, unknown>>;
+    stream(url: string): IStreamBuilder;
 }
 
 const getBinaryPath = (): string => {
@@ -42,9 +38,14 @@ const getBinaryPath = (): string => {
 
 const COOKIES_FILE_PATH = path.resolve(process.cwd(), 'cookies.txt');
 
-// Casting constructor through unknown to avoid any
+/**
+ * Robust Constructor Initialization
+ */
+// @ts-expect-error - Handling library interop
+const YtDlpClass = YtDlpModule.YtDlp || YtDlpModule.default || YtDlpModule;
+
 type YtDlpConstructor = new (options: { binaryPath: string }) => IYtDlpInstance;
-const YtDlpEngine = (YtDlp as unknown) as YtDlpConstructor;
+const YtDlpEngine = YtDlpClass as unknown as YtDlpConstructor;
 
 const ytdlp = new YtDlpEngine({
     binaryPath: getBinaryPath()
@@ -59,19 +60,14 @@ export async function POST(req: NextRequest) {
         /**
          * 1. GET METADATA
          */
-        let infoBuilder = ytdlp.getInfo(url);
-        if (hasCookies) {
-            infoBuilder = infoBuilder.Auth.cookies(COOKIES_FILE_PATH);
-        }
-        const info = await infoBuilder.fetch();
+        const info = await ytdlp.getInfoAsync(url);
 
         const realTitle = String(info.title || "Youplex_Download");
-        const rawThumbnails = (info.thumbnails as Record<string, string>[]) || [];
+        const rawThumbnails = (info.thumbnails as Record<string, unknown>[]) || [];
         const thumbnail = rawThumbnails.length > 0
             ? String(rawThumbnails[rawThumbnails.length - 1].url)
             : "";
 
-        // Logic to extract the correct filesize from the format list
         const rawFormats = (info.formats as Record<string, unknown>[]) || [];
         const formats = [...rawFormats].reverse();
 
@@ -79,34 +75,32 @@ export async function POST(req: NextRequest) {
             type === 'audio' ? f.vcodec === 'none' : f.vcodec !== 'none'
         ) || (rawFormats.length > 0 ? rawFormats[0] : null);
 
-        // Filesize calculation
         const fileSize = typeof selectedFormat?.filesize === 'number'
             ? selectedFormat.filesize
             : (typeof selectedFormat?.filesize_approx === 'number' ? selectedFormat.filesize_approx : 0);
 
         /**
-         * 2. DOWNLOAD STREAM
+         * 2. STREAMING WITH FLUENT API
          */
-        let downloadBuilder = ytdlp.download(url);
+        const streamBuilder = ytdlp.stream(url);
 
         if (type === "audio") {
-            downloadBuilder = downloadBuilder.format({
-                filter: 'bestaudio',
-                type: 'mp3'
-            });
+            streamBuilder
+                .filter('audioonly')
+                .quality(0) // Best VBR quality (0-10)
+                .type('mp3');
         } else {
-            downloadBuilder = downloadBuilder.format({
-                filter: 'mergevideo',
-                quality: '1080p',
-                type: 'mp4'
-            });
+            streamBuilder
+                .filter('mergevideo')
+                .quality('1080p')
+                .type('mp4');
         }
 
         if (hasCookies) {
-            downloadBuilder = downloadBuilder.Auth.cookies(COOKIES_FILE_PATH);
+            streamBuilder.Auth.cookies(COOKIES_FILE_PATH);
         }
 
-        const nodeStream = downloadBuilder.getStream();
+        const nodeStream = streamBuilder.getStream();
         const passThrough = new PassThrough();
         nodeStream.pipe(passThrough);
 
