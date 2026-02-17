@@ -8,14 +8,18 @@ export async function POST(req: NextRequest) {
     try {
         const { url, type } = await req.json();
 
+
         const info = await ytdlp.getInfoAsync(url);
         const realTitle = info.title || "Youplex Download";
+        // @ts-expect-error - ytdlp-nodejs type definitions
         const thumbnail = info.thumbnails?.[info.thumbnails.length - 1]?.url || "";
 
         // Dynamically find the best format for size calculation
+        // @ts-expect-error - ytdlp-nodejs type definitions
         const selectedFormat = info.formats.reverse().find(f =>
             type === 'audio' ? f.vcodec === 'none' : f.vcodec !== 'none'
-        ) || info.formats[0];
+        ) || // @ts-expect-error - ytdlp-nodejs type definitions
+            info.formats[0];
 
         const fileSize = selectedFormat?.filesize || selectedFormat?.filesize_approx || 0;
 
@@ -23,10 +27,12 @@ export async function POST(req: NextRequest) {
 
         if (type === "audio") {
             // "bestaudio" ensures we get the highest bitrate audio available
+            // @ts-expect-error - ytdlp-nodejs type definitions for .filter().type() are overly restrictive
             streamBuilder.filter('bestaudio/best').type('mp3');
         } else {
             // "bestvideo+bestaudio/best" is the gold standard for best quality
             // It grabs the highest res video and highest res audio and merges them
+            // @ts-expect-error - ytdlp-nodejs type definitions for .filter().type() are overly restrictive
             streamBuilder.filter('bestvideo+bestaudio/best').type('mp4');
         }
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Download, Video, Music, Shield, Zap, Loader2, CheckCircle, X, MousePointerClick, Copy, Save, Clock, Trash2 } from "lucide-react";
+import Link from "next/link";
+import { Search, Download, Video, Music, Shield, Zap, Loader2, X, MousePointerClick, Copy, Save, Clock, Trash2 } from "lucide-react";
 
 interface DownloadItem {
     id: string;
@@ -11,6 +12,17 @@ interface DownloadItem {
     type: "video" | "audio";
     date: string;
 }
+
+const SUPPORTED_SITES = [
+    { name: "YouTube", icon: "🔴" },
+    { name: "TikTok", icon: "🎵" },
+    { name: "Instagram", icon: "📸" },
+    { name: "Twitter / X", icon: "🐦" },
+    { name: "Vimeo", icon: "🎬" },
+    { name: "Facebook", icon: "👥" },
+    { name: "SoundCloud", icon: "☁️" },
+    { name: "Twitch", icon: "💜" },
+];
 
 export default function Home() {
     const [url, setUrl] = useState("");
@@ -51,7 +63,7 @@ export default function Home() {
             setStatus("streaming");
 
             let receivedLength = 0;
-            const chunks: Uint8Array[] = [];
+            const chunks: BlobPart[] = [];
 
             while(true) {
                 const {done, value} = await reader.read();
@@ -210,7 +222,39 @@ export default function Home() {
                 </div>
             </section>
 
-            <footer className="py-12 text-center border-t border-slate-100 dark:border-zinc-800 text-sm text-slate-400">© 2026 Youplex Downloader.</footer>
+
+
+            {/*supported sites*/}
+            <section className="max-w-4xl mx-auto px-6 py-20 border-t border-slate-100 dark:border-zinc-800">
+                <div className="text-center mb-10">
+                    <h2 className="text-3xl font-black mb-2">1000+ Sites Supported</h2>
+                    <p className="text-slate-500">We use the most advanced extraction engine to ensure compatibility.</p>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {SUPPORTED_SITES.map((site) => (
+                        <div key={site.name} className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-zinc-900 rounded-2xl border border-transparent hover:border-brand-primary/20 transition-all">
+                            <span className="text-xl">{site.icon}</span>
+                            <span className="font-bold text-sm">{site.name}</span>
+                        </div>
+                    ))}
+                </div>
+
+                <p className="text-center mt-8 text-xs text-slate-400 font-medium italic">
+                    + and 1,100 more including Reddit, DailyMotion, and various news platforms.
+                </p>
+            </section>
+
+            <footer className="py-12 text-center border-t border-slate-100 dark:border-zinc-800 text-sm text-slate-400">
+                <div className="flex justify-center gap-8 mb-6 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <Link href="/privacy" className="hover:text-brand-primary transition-colors">Privacy</Link>
+                    <Link href="#" className="hover:text-brand-primary transition-colors">Terms</Link>
+                    <Link href="mailto:support@youplex.xyz" className="hover:text-brand-primary transition-colors">Support</Link>
+                </div>
+                <p className="text-[10px] font-bold text-slate-300 uppercase tracking-[0.3em]">
+                    © 2026 Youplex Downloader
+                </p>
+            </footer>
         </div>
     );
 }
