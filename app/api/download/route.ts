@@ -25,7 +25,7 @@ const getBinaryPath = () => {
     return 'yt-dlp';
 };
 
-const COOKIES_PATH = path.join(process.cwd(), 'cookies.txt');
+const COOKIES_PATH = path.resolve(process.cwd(), 'cookies.txt');
 
 // Define the constructor type that handles the binaryPath and global args
 type YtDlpConstructor = new (options: { binaryPath: string; args?: string[] }) => IYtDlpInstance;
