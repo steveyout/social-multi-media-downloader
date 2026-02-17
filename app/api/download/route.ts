@@ -96,11 +96,11 @@ export async function POST(req: NextRequest) {
         if (type === "audio") {
             streamBuilder
                 .filter('audioonly')
-                .quality(0) // Best VBR quality
+                .quality('highest')
                 .type('mp3');
         } else {
             streamBuilder
-                .filter('mergevideo')
+                .filter('audioandvideo') //
                 .quality('highest')
                 .type('mp4');
         }
