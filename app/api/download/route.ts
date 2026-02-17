@@ -9,7 +9,7 @@ interface YtDlpOptions {
 }
 
 const getBinaryPath = () => {
-    const vpsPath = '/usr/bin/yt-dlp';
+    const vpsPath = '/usr/local/bin/yt-dlp';
     const localBin = path.join(process.cwd(), 'bin', 'yt-dlp');
 
     if (fs.existsSync(vpsPath)) return vpsPath;
