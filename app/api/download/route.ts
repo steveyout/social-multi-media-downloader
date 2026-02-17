@@ -40,7 +40,7 @@ const getBinaryPath = (): string => {
     return 'yt-dlp';
 };
 
-// Use path.resolve to ensure the VPS finds the file regardless of PM2's working directory
+// Use path.resolve to ensure absolute pathing on VPS
 const COOKIES_FILE_PATH = path.resolve(process.cwd(), 'cookies.txt');
 
 // Resolve the Library Class
@@ -60,17 +60,17 @@ export async function POST(req: NextRequest) {
 
         const hasCookies = fs.existsSync(COOKIES_FILE_PATH);
 
-        console.log(`[Youplex] Processing: ${url} | Cookies Found: ${hasCookies}`);
+        console.log(`[Youplex] Authenticating: ${url} | Cookies: ${hasCookies}`);
 
         /**
          * 1. GET METADATA
-         * We pass cookies as rawArgs here because getInfoAsync is a standalone promise.
+         * We pass cookies via rawArgs for the info fetch.
          */
         const info = await ytdlp.getInfoAsync(url, {
             rawArgs: hasCookies ? [`--cookies=${COOKIES_FILE_PATH}`] : []
         });
 
-        const realTitle = String(info.title || "Youplex_Download");
+        const realTitle = String(info.title || "Youplex_Media");
         const rawThumbnails = (info.thumbnails as Record<string, unknown>[]) || [];
         const thumbnail = rawThumbnails.length > 0
             ? String(rawThumbnails[rawThumbnails.length - 1].url)
@@ -89,14 +89,14 @@ export async function POST(req: NextRequest) {
 
         /**
          * 2. DOWNLOAD STREAM
-         * Using the fluent API as per documentation.
+         * Fluent API chain as per the ytdlp-nodejs documentation.
          */
         const streamBuilder = ytdlp.stream(url);
 
         if (type === "audio") {
             streamBuilder
                 .filter('audioonly')
-                .quality(0)
+                .quality(0) // Best VBR quality
                 .type('mp3');
         } else {
             streamBuilder
@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
                 .type('mp4');
         }
 
-        // Apply cookies to the stream if file exists
+        // Apply cookies to the stream builder
         if (hasCookies) {
             streamBuilder.Auth.cookies(COOKIES_FILE_PATH);
         }
