@@ -101,33 +101,34 @@ export async function POST(req: NextRequest) {
          */
         const streamBuilder = ytdlp.stream(url);
         // Standard flags for solving JS challenges in download mode
-        const challengeFlags = {
+        const baseOptions: Record<string, string | boolean | number> = {
             jsRuntimes: 'deno',
             remoteComponents: 'ejs:github',
-            cookies: COOKIES_FILE_PATH,
-            userAgent: userAgent
+            userAgent: userAgent,
+            noCheckCertificate: true
         };
+
+        // Apply cookies to the stream builder
+        if (hasCookies) {
+            baseOptions.cookies = COOKIES_FILE_PATH;
+        }
 
         if (type === "audio") {
             streamBuilder
                 .options({
-                    ...challengeFlags,
+                    ...baseOptions,
                     format: 'bestaudio/best',
                 })
                 .type('mp3');
         } else {
             streamBuilder
                 .options({
-                    ...challengeFlags,
+                    ...baseOptions,
                     format: 'bestvideo+bestaudio/best',
                     mergeOutputFormat: 'mp4',
                 });
         }
 
-        // Apply cookies to the stream builder
-        if (hasCookies) {
-            streamBuilder.Auth.cookies(COOKIES_FILE_PATH);
-        }
 
         const nodeStream = streamBuilder.getStream();
         const passThrough = new PassThrough();
