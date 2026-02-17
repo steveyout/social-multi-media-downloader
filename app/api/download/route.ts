@@ -21,6 +21,7 @@ interface IStreamBuilder {
     Auth: IBuilderAuth;
     getStream(): import("stream").Readable;
     on(event: string, fn: (data: unknown) => void): IStreamBuilder;
+    options(args: Record<string, string | boolean>): IStreamBuilder;
 }
 
 interface IYtDlpInstance {
@@ -59,6 +60,7 @@ export async function POST(req: NextRequest) {
         const { url, type } = await req.json();
 
         const hasCookies = fs.existsSync(COOKIES_FILE_PATH);
+        const userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
 
         console.log(`[Youplex] Authenticating: ${url} | Cookies: ${hasCookies}`);
 
@@ -67,7 +69,13 @@ export async function POST(req: NextRequest) {
          * We pass cookies via rawArgs for the info fetch.
          */
         const info = await ytdlp.getInfoAsync(url, {
-            rawArgs: hasCookies ? [`--cookies=${COOKIES_FILE_PATH}`] : []
+            rawArgs: [
+                ...(hasCookies ? [`--cookies=${COOKIES_FILE_PATH}`] : []),
+                `--user-agent=${userAgent}`,
+                "--no-check-certificate",
+                "--js-runtimes", "deno",
+                "--remote-components", "ejs:github"
+            ]
         });
 
         const realTitle = String(info.title || "Youplex_Media");
@@ -92,13 +100,28 @@ export async function POST(req: NextRequest) {
          * Fluent API chain as per the ytdlp-nodejs documentation.
          */
         const streamBuilder = ytdlp.stream(url);
+        // Standard flags for solving JS challenges in download mode
+        const challengeFlags = {
+            jsRuntimes: 'deno',
+            remoteComponents: 'ejs:github',
+            cookies: COOKIES_FILE_PATH,
+            userAgent: userAgent
+        };
 
         if (type === "audio") {
             streamBuilder
-                .filter('bestaudio/best').type('mp3');
+                .options({
+                    ...challengeFlags,
+                    format: 'bestaudio/best',
+                })
+                .type('mp3');
         } else {
             streamBuilder
-                .filter('bestvideo+bestaudio/best').type('mp4');
+                .options({
+                    ...challengeFlags,
+                    format: 'bestvideo+bestaudio/best',
+                    mergeOutputFormat: 'mp4',
+                });
         }
 
         // Apply cookies to the stream builder
