@@ -95,14 +95,10 @@ export async function POST(req: NextRequest) {
 
         if (type === "audio") {
             streamBuilder
-                .filter('audioonly')
-                .quality('highest')
-                .type('mp3');
+                .filter('bestaudio/best').type('mp3');
         } else {
             streamBuilder
-                .filter('audioandvideo') //
-                .quality('highest')
-                .type('mp4');
+                .filter('bestvideo+bestaudio/best').type('mp4');
         }
 
         // Apply cookies to the stream builder
