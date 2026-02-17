@@ -1,8 +1,27 @@
 import { NextRequest } from "next/server";
 import { YtDlp } from 'ytdlp-nodejs';
 import { PassThrough } from "stream";
+import path from "path";
+import fs from "fs";
 
-const ytdlp = new YtDlp();
+interface YtDlpOptions {
+    path?: string;
+}
+
+const getBinaryPath = () => {
+    const vpsPath = '/usr/bin/yt-dlp';
+    const localBin = path.join(process.cwd(), 'bin', 'yt-dlp');
+
+    if (fs.existsSync(vpsPath)) return vpsPath;
+    if (fs.existsSync(localBin)) return localBin;
+
+    return 'yt-dlp';
+};
+
+// We use 'unknown' then the specific interface to avoid the "unexpected any" lint error
+const ytdlp = new (YtDlp as unknown as new (options: YtDlpOptions) => typeof YtDlp)({
+    path: getBinaryPath()
+}) as unknown as YtDlp;
 
 export async function POST(req: NextRequest) {
     try {
