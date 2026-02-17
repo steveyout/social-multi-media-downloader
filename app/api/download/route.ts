@@ -4,10 +4,17 @@ import { PassThrough } from "stream";
 import path from "path";
 import fs from "fs";
 
-interface YtDlpOptions {
-    binaryPath?: string;
+/**
+ * AUTHENTICATED VPS ENGINE:
+ * We inject --cookies into the binary arguments globally.
+ */
+interface IYtDlpInstance {
+    getInfoAsync(url: string): Promise<Record<string, unknown>>;
+    stream(url: string): {
+        filter(f: string): { type(t: string): never };
+        getStream(): import("stream").Readable;
+    };
 }
-
 const getBinaryPath = () => {
     const vpsPath = '/usr/local/bin/yt-dlp';
     const localBin = path.join(process.cwd(), 'bin', 'yt-dlp');
@@ -18,18 +25,26 @@ const getBinaryPath = () => {
     return 'yt-dlp';
 };
 
-// We use 'unknown' then the specific interface to avoid the "unexpected any" lint error
-const ytdlp = new (YtDlp as unknown as new (options: YtDlpOptions) => typeof YtDlp)({
-    binaryPath: getBinaryPath()
-}) as unknown as YtDlp;
+const COOKIES_PATH = path.join(process.cwd(), 'cookies.txt');
+
+// Define the constructor type that handles the binaryPath and global args
+type YtDlpConstructor = new (options: { binaryPath: string; args?: string[] }) => IYtDlpInstance;
+
+// Cast the imported class to our custom constructor
+const YtDlpEngine = (YtDlp as unknown) as YtDlpConstructor;
+
+const ytdlp = new YtDlpEngine({
+    binaryPath: getBinaryPath(),
+    // Global arguments applied to every call (Info + Stream)
+    ...(fs.existsSync(COOKIES_PATH) ? { args: [`--cookies=${COOKIES_PATH}`] } : {})
+});
 
 export async function POST(req: NextRequest) {
     try {
         const { url, type } = await req.json();
 
-
-        const info = await ytdlp.getInfoAsync(url);
-        const realTitle = info.title || "Youplex Download";
+        const info = await ytdlp.getInfoAsync(url) as Record<string, unknown>;
+        const realTitle = String(info.title || "Youplex_Download");
         // @ts-expect-error - ytdlp-nodejs type definitions
         const thumbnail = info.thumbnails?.[info.thumbnails.length - 1]?.url || "";
 
@@ -46,12 +61,10 @@ export async function POST(req: NextRequest) {
 
         if (type === "audio") {
             // "bestaudio" ensures we get the highest bitrate audio available
-            // @ts-expect-error - ytdlp-nodejs type definitions for .filter().type() are overly restrictive
             streamBuilder.filter('bestaudio/best').type('mp3');
         } else {
             // "bestvideo+bestaudio/best" is the gold standard for best quality
             // It grabs the highest res video and highest res audio and merges them
-            // @ts-expect-error - ytdlp-nodejs type definitions for .filter().type() are overly restrictive
             streamBuilder.filter('bestvideo+bestaudio/best').type('mp4');
         }
 
